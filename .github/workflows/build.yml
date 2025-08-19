@@ -49,10 +49,10 @@ jobs:
 
       - name: Clone Prebuilt Toolchains
         run: |
-          # GCC64 (arm64) 官方
-          git clone https://android.googlesource.com/platform/prebuilts/gcc/linux-x86/aarch64/aarch64-linux-android-4.9 prebuilts/gcc64
-          # GCC32 (arm) 官方
-          git clone https://android.googlesource.com/platform/prebuilts/gcc/linux-x86/arm/arm-linux-androideabi-4.9 prebuilts/gcc32
+          # GCC64 (arm64) LineageOS
+          git clone https://github.com/LineageOS/android_prebuilts_gcc_linux-x86_aarch64_aarch64-linux-android-4.9 prebuilts/gcc64
+          # GCC32 (arm) LineageOS
+          git clone https://github.com/LineageOS/android_prebuilts_gcc_linux-x86_arm_arm-linux-androideabi-4.9 prebuilts/gcc32
           # Clang r416183b LineageOS
           git clone https://github.com/LineageOS/android_prebuilts_clang_kernel_linux-x86_clang-r416183b prebuilts/clang
 
@@ -60,9 +60,9 @@ jobs:
         run: |
           # 设置 Clang
           export PATH=$PWD/prebuilts/clang/bin:$PATH
-          # 设置 GCC64/32
-          export CROSS_COMPILE=$PWD/prebuilts/gcc64/bin/aarch64-linux-android-
-          export CROSS_COMPILE_ARM32=$PWD/prebuilts/gcc32/bin/arm-linux-androideabi-
+          # 设置 GCC64/32 前缀为实际可执行文件
+          export CROSS_COMPILE=$PWD/prebuilts/gcc64/bin/aarch64-linux-androidkernel-
+          export CROSS_COMPILE_ARM32=$PWD/prebuilts/gcc32/bin/arm-linux-androidkernel-
           echo "Using toolchains:"
           which clang
           $CROSS_COMPILE --version
