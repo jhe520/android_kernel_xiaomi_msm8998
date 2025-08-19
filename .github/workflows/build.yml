@@ -54,11 +54,11 @@ jobs:
       - name: Set Toolchain Environment
         run: |
           ARCH=arm64
-          OUT_DIR=./out
-          CLANG_DIR=$PWD/prebuilts/clang
-          CC=$CLANG_DIR/bin/clang
-          CROSS_COMPILE=$PWD/prebuilts/gcc64/bin/aarch64-linux-android-4.9-
-          CROSS_COMPILE_ARM32=$PWD/prebuilts/gcc32/bin/arm-linux-androideabi-4.9-
+          OUT_DIR="./out"
+          CLANG_DIR="$PWD/prebuilts/clang"
+          CC="$CLANG_DIR/bin/clang"
+          CROSS_COMPILE="$PWD/prebuilts/gcc64/bin/aarch64-linux-androidkernel-"
+          CROSS_COMPILE_ARM32="$PWD/prebuilts/gcc32/arm-linux-androidkernel-"
           CLANG_TRIPLE="aarch64-linux-gnu-"
           CC_ADDITION_FLAGS="AR=llvm-ar NM=llvm-nm OBJCOPY=llvm-objcopy OBJDUMP=llvm-objdump STRIP=llvm-strip LLVM_IAS=1 LLVM=1 LD=ld.lld"
           export PATH=$CLANG_DIR/bin:$PATH
