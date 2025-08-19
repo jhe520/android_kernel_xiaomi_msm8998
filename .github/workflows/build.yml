@@ -95,7 +95,7 @@ jobs:
           cd "$GITHUB_WORKSPACE"
 
       - name: Upload Patched Kernel Artifact
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: kernel-build-patched
           path: $OUT_DIR
