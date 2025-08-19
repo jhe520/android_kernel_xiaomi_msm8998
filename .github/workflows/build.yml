@@ -16,7 +16,7 @@ jobs:
 
     steps:
       - name: Checkout Kernel Source
-        uses: actions/checkout@v4
+        uses: actions/checkout@v3
         with:
           repository: jhe520/android_kernel_xiaomi_msm8998
           ref: lineage-18.1
@@ -31,8 +31,21 @@ jobs:
             squashfs-tools pngcrush schedtool dpkg-dev liblz4-tool make optipng maven \
             libssl-dev pwgen libswitch-perl policycoreutils minicom \
             libxml-sax-base-perl libxml-simple-perl bc libx11-dev libgl1-mesa-dev \
-            xsltproc unzip device-tree-compiler python3 python2 libelf-dev binutils-aarch64-linux-gnu \
+            xsltproc unzip device-tree-compiler python3 libelf-dev binutils-aarch64-linux-gnu \
             repo wget
+
+      - name: Install Python2 from Official Source
+        run: |
+          PYTHON2_VERSION=2.7.18
+          wget https://www.python.org/ftp/python/$PYTHON2_VERSION/Python-$PYTHON2_VERSION.tgz
+          tar -xvf Python-$PYTHON2_VERSION.tgz
+          cd Python-$PYTHON2_VERSION
+          ./configure --prefix=$HOME/.local
+          make -j$(nproc)
+          make install
+          cd ..
+          export PATH=$HOME/.local/bin:$PATH
+          python2 --version
 
       - name: Clone Prebuilt Toolchains
         run: |
@@ -95,7 +108,7 @@ jobs:
           cd "$GITHUB_WORKSPACE"
 
       - name: Upload Patched Kernel Artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v3
         with:
           name: kernel-build-patched
           path: $OUT_DIR
