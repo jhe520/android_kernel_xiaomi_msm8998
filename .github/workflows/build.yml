@@ -16,7 +16,7 @@ jobs:
 
     steps:
       - name: Checkout Kernel Source
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
         with:
           repository: jhe520/android_kernel_xiaomi_msm8998
           ref: lineage-18.1
@@ -108,7 +108,7 @@ jobs:
           cd "$GITHUB_WORKSPACE"
 
       - name: Upload Patched Kernel Artifact
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: kernel-build-patched
           path: $OUT_DIR
