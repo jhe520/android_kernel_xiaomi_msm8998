@@ -16,7 +16,7 @@ jobs:
 
     steps:
       - name: Checkout Kernel Source
-        uses: actions/checkout@v4
+        uses: actions/checkout@v3
         with:
           repository: jhe520/android_kernel_xiaomi_msm8998
           ref: lineage-18.1
@@ -56,9 +56,23 @@ jobs:
 
       - name: Set Toolchain Environment
         run: |
+          # Clang
           export PATH=$PWD/prebuilts/clang/bin:$PATH
-          export CROSS_COMPILE=$PWD/prebuilts/gcc64/bin/aarch64-linux-android-
-          export CROSS_COMPILE_ARM32=$PWD/prebuilts/gcc32/bin/arm-linux-androideabi-
+
+          # GCC64 (aarch64)
+          GCC64_BIN=$PWD/prebuilts/gcc64/bin
+          if [ ! -f $GCC64_BIN/aarch64-linux-android- ]; then
+            ln -s $GCC64_BIN/aarch64-linux-android-4.9 $GCC64_BIN/aarch64-linux-android-
+          fi
+          export CROSS_COMPILE=$GCC64_BIN/aarch64-linux-android-
+
+          # GCC32 (arm)
+          GCC32_BIN=$PWD/prebuilts/gcc32/bin
+          if [ ! -f $GCC32_BIN/arm-linux-androideabi- ]; then
+            ln -s $GCC32_BIN/arm-linux-androideabi-4.9 $GCC32_BIN/arm-linux-androideabi-
+          fi
+          export CROSS_COMPILE_ARM32=$GCC32_BIN/arm-linux-androideabi-
+
           echo "Using toolchains:"
           which clang
           $CROSS_COMPILE --version
