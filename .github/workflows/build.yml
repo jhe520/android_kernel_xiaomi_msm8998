@@ -10,7 +10,7 @@ jobs:
   build:
     runs-on: ubuntu-latest
     env:
-      OUT_DIR: ./out
+      OUT_DIR: ./out  # 全局输出目录
 
     steps:
       - name: Checkout Kernel Source
@@ -18,7 +18,7 @@ jobs:
         with:
           repository: jhe520/android_kernel_xiaomi_msm8998
           ref: lineage-18.1
-          fetch-depth: 0
+          fetch-depth: 0  # 拉取完整历史，避免补丁依赖问题
 
       - name: Install Required Packages
         run: |
@@ -32,50 +32,79 @@ jobs:
             xsltproc unzip device-tree-compiler python3 libelf-dev binutils-aarch64-linux-gnu \
             repo wget
 
-      - name: Install Python2 from Official Source
+      - name: Install Python2 from Official Source (持久化环境)
         run: |
           PYTHON2_VERSION=2.7.18
           wget https://www.python.org/ftp/python/$PYTHON2_VERSION/Python-$PYTHON2_VERSION.tgz
           tar -xvf Python-$PYTHON2_VERSION.tgz
           cd Python-$PYTHON2_VERSION
           ./configure --prefix=$HOME/.local
-          make -j$(nproc)
+          make -j$(nproc)  # 多线程编译加速
           make install
           cd ..
-          export PATH=$HOME/.local/bin:$PATH
-          python2 --version
+          # 持久化 Python2 路径到全局环境（解决后续步骤找不到 python2 的问题）
+          echo "PATH=$HOME/.local/bin:$PATH" >> $GITHUB_ENV
+          python2 --version  # 验证安装
 
-      - name: Clone Prebuilt GCC Toolchains from Google
+      - name: Clone Prebuilt Toolchains
         run: |
+          # 克隆 ARM64 GCC 4.9 工具链（实际文件前缀为 aarch64-linux-android-）
           git clone https://gitee.com/SorryMyLife/android_prebuilts_gcc_linux-x86_aarch64_aarch64-linux-android-4.9 prebuilts/gcc64
+          # 克隆 ARM32 GCC 4.9 工具链（实际文件前缀为 arm-linux-androideabi-）
           git clone https://gitee.com/SorryMyLife/android_prebuilts_gcc_linux-x86_arm_arm-linux-androideabi-4.9 prebuilts/gcc32
+          # 克隆 Clang 工具链
           git clone https://github.com/LineageOS/android_prebuilts_clang_kernel_linux-x86_clang-r416183b prebuilts/clang
+          # 验证工具链文件是否存在（可选，用于调试）
+          echo "=== ARM64 Toolchain Files ==="
+          ls -l prebuilts/gcc64/bin/aarch64-linux-android-* | head -5
+          echo "=== ARM32 Toolchain Files ==="
+          ls -l prebuilts/gcc32/bin/arm-linux-androideabi-* | head -5
 
-      - name: Set Toolchain Environment
+      - name: Set Toolchain Environment (修复路径 + 持久化变量)
         run: |
           ARCH=arm64
-          OUT_DIR="./out"
           CLANG_DIR="$PWD/prebuilts/clang"
-          CC="$CLANG_DIR/bin/clang"
-          CROSS_COMPILE="$PWD/prebuilts/gcc64/bin/aarch64-linux-androidkernel-"
-          CROSS_COMPILE_ARM32="$PWD/prebuilts/gcc32/arm-linux-androidkernel-"
+          # 1. 修复 CROSS_COMPILE 路径：匹配实际工具链前缀（去掉 androidkernel-，改为 android-）
+          CROSS_COMPILE="$PWD/prebuilts/gcc64/bin/aarch64-linux-android-"
+          # 2. 修复 CROSS_COMPILE_ARM32 路径：补充 bin 目录 + 匹配实际前缀（androideabi-）
+          CROSS_COMPILE_ARM32="$PWD/prebuilts/gcc32/bin/arm-linux-androideabi-"
           CLANG_TRIPLE="aarch64-linux-gnu-"
-          CC_ADDITION_FLAGS="AR=llvm-ar NM=llvm-nm OBJCOPY=llvm-objcopy OBJDUMP=llvm-objdump STRIP=llvm-strip LLVM_IAS=1 LLVM=1 LD=ld.lld"
-          export PATH=$CLANG_DIR/bin:$PATH
-          echo "Using toolchains:"
-          $CC --version
-          $CROSS_COMPILE --version
-          $CROSS_COMPILE_ARM32 --version
+          # 3. 调整 CC_ADDITION_FLAGS：移除可能不兼容的 LD=ld.lld（老内核 4.4 更适配 GCC 的 ld）
+          CC_ADDITION_FLAGS="AR=llvm-ar NM=llvm-nm OBJCOPY=llvm-objcopy OBJDUMP=llvm-objdump STRIP=llvm-strip LLVM_IAS=1"
+          
+          # 4. 持久化环境变量到全局（让后续 Build 步骤能读取到）
+          echo "ARCH=$ARCH" >> $GITHUB_ENV
+          echo "CLANG_DIR=$CLANG_DIR" >> $GITHUB_ENV
+          echo "CC=$CLANG_DIR/bin/clang" >> $GITHUB_ENV
+          echo "CROSS_COMPILE=$CROSS_COMPILE" >> $GITHUB_ENV
+          echo "CROSS_COMPILE_ARM32=$CROSS_COMPILE_ARM32" >> $GITHUB_ENV
+          echo "CLANG_TRIPLE=$CLANG_TRIPLE" >> $GITHUB_ENV
+          echo "CC_ADDITION_FLAGS=$CC_ADDITION_FLAGS" >> $GITHUB_ENV
+          # 5. 持久化 Clang 路径到 PATH
+          echo "$CLANG_DIR/bin" >> $GITHUB_PATH
+
+          # 6. 正确验证工具链版本（拼接 gcc 后缀，避免之前的无文件错误）
+          echo "=== Toolchain Versions ==="
+          $CC --version  # 验证 Clang
+          $CROSS_COMPILEgcc --version  # 验证 ARM64 GCC（关键：前缀 + gcc）
+          $CROSS_COMPILE_ARM32gcc --version  # 验证 ARM32 GCC（关键：前缀 + gcc）
 
       - name: Patch set_memory.h for <4.19 Kernel
         run: |
           mkdir -p include/linux
+          # Base64 解码补丁内容（保持原逻辑不变）
           echo "I2luY2x1ZGUgPGxpbmV4L2tlcm5lbC5oPg0KaW5jbHVkZSA8bGlua3MvbW0uaD4NCmluY2x1ZGUgPGFzbS9jYWNoZWZsdXNoLmg+DQppbmNsdWRlIDxhcz9wZ3RhYmxlLmg+DQovKiBNaW5pbWFsIHNldF9tZW1vcnkgcGF0Y2ggZm9yIDw0LjE5IGtlcm5lbHMgKi8NCnN0YXRpYyBpbmxpbmUgaW50IHNldF9tZW1vcnlfcm8odW5zaWduZWQgbG9uZyBhZGRyLCBpbnQgbnVtcGFnZXMpIHsgcmV0dXJuIDA7IH0Kc3RhdGljIGlubGluZSBpbnQgc2V0X21lbW9yeV93cihlZCBhZGRyLCBpbnQgbnVtcGFnZXMpIHsgcmV0dXJuIDA7IH0Kc3RhdGljIGlubGluZSBpbnQgc2V0X21lbW9yeV94KHVuc2lnbmVkIGxvbmcgYWRkciwgaW50IG51bXBhZ2VzKSB7IHJldHVybiAwOyB9CnN0YXRpYyBpbmxpbmUgaW50IHNldF9tZW1vcnlfbngodW5zaWduZWQgbG9uZyBhZGRyLCBpbnQgbnVtcGFnZXMpIHsgcmV0dXJuIDA7IH0=" | base64 --decode > include/linux/set_memory_patch.h
           sed -i '1i#include "set_memory_patch.h"' include/linux/set_memory.h
 
-      - name: Update chiron_defconfig with required options
+      - name: Update chiron_defconfig with Required Options
         run: |
           CONFIG_FILE="arch/arm64/configs/chiron_defconfig"
+          # 确保配置文件存在（避免文件不存在导致脚本报错）
+          if [ ! -f "$CONFIG_FILE" ]; then
+            echo "Error: $CONFIG_FILE not found!"
+            exit 1
+          fi
+          # 待添加/修改的配置项（保持原逻辑不变）
           declare -a OPTIONS=(
             "CONFIG_KALLSYMS=y"
             "CONFIG_KALLSYMS_ALL=y"
@@ -86,35 +115,68 @@ jobs:
             "CONFIG_KPM=y"
           )
           for opt in "${OPTIONS[@]}"; do
-            if grep -q "^${opt%%=*}" $CONFIG_FILE; then
-              sed -i "s|^${opt%%=*}.*|$opt|" $CONFIG_FILE
+            opt_key="${opt%%=*}"
+            if grep -q "^$opt_key" "$CONFIG_FILE"; then
+              sed -i "s|^$opt_key.*|$opt|" "$CONFIG_FILE"
             else
-              echo "$opt" >> $CONFIG_FILE
+              echo "$opt" >> "$CONFIG_FILE"
             fi
           done
+          # 验证配置是否生效（可选）
+          echo "=== Updated Config Entries ==="
+          grep -E "KALLSYMS|KPROBES|KSU|KPM" "$CONFIG_FILE"
 
       - name: Apply SukiSU Ultra Nongki Script
         run: |
-          curl -LSs "https://raw.githubusercontent.com/SukiSU-Ultra/SukiSU-Ultra/main/kernel/setup.sh" | bash -s nongki
+          # 增加超时控制 + 错误捕获（避免脚本异常导致构建中断）
+          curl -LSs --connect-timeout 10 "https://raw.githubusercontent.com/SukiSU-Ultra/SukiSU-Ultra/main/kernel/setup.sh" | bash -s nongki || {
+            echo "Error: Failed to apply SukiSU Ultra script!"
+            exit 1
+          }
 
-      - name: Build Kernel
+      - name: Build Kernel (使用持久化变量)
         run: |
           THREAD=$(nproc --all)
-          args="-j$THREAD O=$OUT_DIR ARCH=$ARCH CROSS_COMPILE=$CROSS_COMPILE CROSS_COMPILE_ARM32=$CROSS_COMPILE_ARM32 CC=$CC CLANG_TRIPLE=$CLANG_TRIPLE $CC_ADDITION_FLAGS"
-          echo "[+]Args: $args"
-          make chiron_defconfig $args
-          make $args
+          # 拼接编译参数（使用全局环境变量，避免变量丢失）
+          args="-j$THREAD O=${{ env.OUT_DIR }} ARCH=${{ env.ARCH }} \
+                CROSS_COMPILE=${{ env.CROSS_COMPILE }} \
+                CROSS_COMPILE_ARM32=${{ env.CROSS_COMPILE_ARM32 }} \
+                CC=${{ env.CC }} CLANG_TRIPLE=${{ env.CLANG_TRIPLE }} \
+                ${{ env.CC_ADDITION_FLAGS }}"
+          echo "[+] Build Args: $args"
+          # 生成配置文件
+          make chiron_defconfig $args || {
+            echo "Error: Failed to generate defconfig!"
+            exit 1
+          }
+          # 编译内核（多线程加速）
+          make $args || {
+            echo "Error: Kernel build failed!"
+            exit 1
+          }
+          # 验证编译产物是否存在（可选）
+          echo "=== Build Output Check ==="
+          ls -l ${{ env.OUT_DIR }}/arch/arm64/boot/Image*  # 内核镜像文件
 
       - name: Apply SukiSU KPM patch_linux
         run: |
-          git clone https://github.com/SukiSU-Ultra/SukiSU_patch.git kpm
+          git clone --depth 1 https://github.com/SukiSU-Ultra/SukiSU_patch.git kpm  # 浅克隆加速
           cd kpm/kpm
           chmod +x patch_linux
-          ./patch_linux "$GITHUB_WORKSPACE/$OUT_DIR"
-          cd "$GITHUB_WORKSPACE"
+          # 传入正确的输出目录路径
+          ./patch_linux "${{ github.workspace }}/${{ env.OUT_DIR }}" || {
+            echo "Error: Failed to apply KPM patch!"
+            exit 1
+          }
+          cd "${{ github.workspace }}"
 
-      - name: Upload Patched Kernel Artifact
+      - name: Upload Patched Kernel Artifact (明确路径)
         uses: actions/upload-artifact@v4
         with:
           name: kernel-build-patched
-          path: $OUT_DIR
+          # 只上传关键产物（避免上传冗余文件）
+          path: |
+            ${{ env.OUT_DIR }}/arch/arm64/boot/Image*  # 内核镜像（Image 或 Image.gz-dtb）
+            ${{ env.OUT_DIR }}/.config                 # 编译配置文件（用于调试）
+            ${{ env.OUT_DIR }}/vmlinux                 # 未压缩内核（可选，用于调试）
+          retention-days: 7  #  artifacts 保留 7 天（可按需调整）
