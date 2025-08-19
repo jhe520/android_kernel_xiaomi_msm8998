@@ -10,8 +10,6 @@ jobs:
   build:
     runs-on: ubuntu-latest
     env:
-      ARCH: arm64
-      JOBS: 8
       OUT_DIR: ./out
 
     steps:
@@ -49,22 +47,23 @@ jobs:
 
       - name: Clone Prebuilt Toolchains
         run: |
-          # GCC64 (arm64) LineageOS
           git clone https://github.com/LineageOS/android_prebuilts_gcc_linux-x86_aarch64_aarch64-linux-android-4.9 prebuilts/gcc64
-          # GCC32 (arm) LineageOS
           git clone https://github.com/LineageOS/android_prebuilts_gcc_linux-x86_arm_arm-linux-androideabi-4.9 prebuilts/gcc32
-          # Clang r416183b LineageOS
           git clone https://github.com/LineageOS/android_prebuilts_clang_kernel_linux-x86_clang-r416183b prebuilts/clang
 
       - name: Set Toolchain Environment
         run: |
-          # 设置 Clang
-          export PATH=$PWD/prebuilts/clang/bin:$PATH
-          # 设置 GCC64/32 前缀为实际可执行文件
-          export CROSS_COMPILE=$PWD/prebuilts/gcc64/bin/aarch64-linux-androidkernel-
-          export CROSS_COMPILE_ARM32=$PWD/prebuilts/gcc32/bin/arm-linux-androidkernel-
+          ARCH=arm64
+          OUT_DIR=./out
+          CLANG_DIR=$PWD/prebuilts/clang
+          CC=$CLANG_DIR/bin/clang
+          CROSS_COMPILE=$PWD/prebuilts/gcc64/bin/aarch64-linux-androidkernel-
+          CROSS_COMPILE_ARM32=$PWD/prebuilts/gcc32/bin/arm-linux-androidkernel-
+          CLANG_TRIPLE="aarch64-linux-gnu-"
+          CC_ADDITION_FLAGS="AR=llvm-ar NM=llvm-nm OBJCOPY=llvm-objcopy OBJDUMP=llvm-objdump STRIP=llvm-strip LLVM_IAS=1 LLVM=1 LD=ld.lld"
+          export PATH=$CLANG_DIR/bin:$PATH
           echo "Using toolchains:"
-          which clang
+          $CC --version
           $CROSS_COMPILE --version
           $CROSS_COMPILE_ARM32 --version
 
@@ -100,8 +99,11 @@ jobs:
 
       - name: Build Kernel
         run: |
-          make O=$OUT_DIR ARCH=$ARCH CROSS_COMPILE=$CROSS_COMPILE CROSS_COMPILE_ARM32=$CROSS_COMPILE_ARM32 chiron_defconfig
-          make O=$OUT_DIR ARCH=$ARCH CROSS_COMPILE=$CROSS_COMPILE CROSS_COMPILE_ARM32=$CROSS_COMPILE_ARM32 -j$JOBS
+          THREAD=$(nproc --all)
+          args="-j$THREAD O=$OUT_DIR ARCH=$ARCH CROSS_COMPILE=$CROSS_COMPILE CROSS_COMPILE_ARM32=$CROSS_COMPILE_ARM32 CC=$CC CLANG_TRIPLE=$CLANG_TRIPLE $CC_ADDITION_FLAGS"
+          echo "[+]Args: $args"
+          make chiron_defconfig $args
+          make $args
 
       - name: Apply SukiSU KPM patch_linux
         run: |
