@@ -1,0 +1,119 @@
+name: Build Android 4.4 Non-GKI Kernel with SukiSU Ultra and KPM Patch
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    env:
+      ARCH: arm64
+      JOBS: 8
+      OUT_DIR: ./out
+
+    steps:
+      - name: Checkout Kernel Source
+        uses: actions/checkout@v3
+        with:
+          repository: jhe520/android_kernel_xiaomi_msm8998
+          ref: lineage-18.1
+          fetch-depth: 0
+
+      - name: Install Required Packages
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            binutils git ccache automake flex lzop bison gperf build-essential zip curl \
+            zlib1g-dev libxml2-utils bzip2 libbz2-dev libbz2-1.0 libghc-bzlib-dev \
+            squashfs-tools pngcrush schedtool dpkg-dev liblz4-tool make optipng maven \
+            libssl-dev pwgen libswitch-perl policycoreutils minicom \
+            libxml-sax-base-perl libxml-simple-perl bc libx11-dev libgl1-mesa-dev \
+            xsltproc unzip device-tree-compiler python3 python2 libelf-dev binutils-aarch64-linux-gnu \
+            repo wget
+
+      - name: Clone Prebuilt Toolchains
+        run: |
+          mkdir -p prebuilts
+          git clone https://github.com/LineageOS/android_prebuilts_clang_kernel_linux-x86_clang-r416183b prebuilts/clang
+          git clone https://github.com/LineageOS/android_prebuilts_gcc_linux-x86_aarch64_aarch64-linux-android-4.9 prebuilts/gcc64
+          git clone https://github.com/LineageOS/android_prebuilts_gcc_linux-x86_arm_arm-linux-androideabi-4.9 prebuilts/gcc32
+
+      - name: Set Toolchain Environment
+        run: |
+          export PATH=$PWD/prebuilts/clang/bin:$PATH
+          export CROSS_COMPILE=$PWD/prebuilts/gcc64/bin/aarch64-linux-android-
+          export CROSS_COMPILE_ARM32=$PWD/prebuilts/gcc32/bin/arm-linux-androideabi-
+          echo "Using toolchains:"
+          which clang
+          $CROSS_COMPILE --version
+          $CROSS_COMPILE_ARM32 --version
+
+      - name: Patch set_memory.h for <4.19 Kernel
+        run: |
+          PATCH_FILE="include/linux/set_memory_patch.h"
+          mkdir -p include/linux
+          cat << 'EOF' > $PATCH_FILE
+#ifndef _LINUX_SET_MEMORY_PATCH_H
+#define _LINUX_SET_MEMORY_PATCH_H
+
+#include <linux/kernel.h>
+#include <linux/mm.h>
+#include <asm/cacheflush.h>
+#include <asm/pgtable.h>
+
+/* Minimal set_memory patch for <4.19 kernels */
+static inline int set_memory_ro(unsigned long addr, int numpages) { return 0; }
+static inline int set_memory_rw(unsigned long addr, int numpages) { return 0; }
+static inline int set_memory_x(unsigned long addr, int numpages) { return 0; }
+static inline int set_memory_nx(unsigned long addr, int numpages) { return 0; }
+
+#endif /* _LINUX_SET_MEMORY_PATCH_H */
+EOF
+          sed -i '1i#include "set_memory_patch.h"' include/linux/set_memory.h
+
+      - name: Update chiron_defconfig with required options
+        run: |
+          CONFIG_FILE="arch/arm64/configs/chiron_defconfig"
+          declare -a OPTIONS=(
+            "CONFIG_KALLSYMS=y"
+            "CONFIG_KALLSYMS_ALL=y"
+            "CONFIG_KPROBES=y"
+            "CONFIG_HAVE_KPROBES=y"
+            "CONFIG_KPROBE_EVENTS=y"
+            "CONFIG_KSU=y"
+            "CONFIG_KPM=y"
+          )
+          for opt in "${OPTIONS[@]}"; do
+            if grep -q "^${opt%%=*}" $CONFIG_FILE; then
+              sed -i "s|^${opt%%=*}.*|$opt|" $CONFIG_FILE
+            else
+              echo "$opt" >> $CONFIG_FILE
+            fi
+          done
+
+      - name: Apply SukiSU Ultra Nongki Script
+        run: |
+          curl -LSs "https://raw.githubusercontent.com/SukiSU-Ultra/SukiSU-Ultra/main/kernel/setup.sh" | bash -s nongki
+
+      - name: Build Kernel
+        run: |
+          make O=$OUT_DIR ARCH=$ARCH CROSS_COMPILE=$CROSS_COMPILE CROSS_COMPILE_ARM32=$CROSS_COMPILE_ARM32 chiron_defconfig
+          make O=$OUT_DIR ARCH=$ARCH CROSS_COMPILE=$CROSS_COMPILE CROSS_COMPILE_ARM32=$CROSS_COMPILE_ARM32 -j$JOBS
+
+      - name: Apply SukiSU KPM patch_linux
+        run: |
+          git clone https://github.com/SukiSU-Ultra/SukiSU_patch.git kpm
+          cd kpm/kpm
+          chmod +x patch_linux
+          # 假设内核镜像在 OUT_DIR 目录下，如 Image.gz-dtb
+          ./patch_linux $GITHUB_WORKSPACE/$OUT_DIR
+          cd $GITHUB_WORKSPACE
+
+      - name: Upload Patched Kernel Artifact
+        uses: actions/upload-artifact@v3
+        with:
+          name: kernel-build-patched
+          path: $OUT_DIR
