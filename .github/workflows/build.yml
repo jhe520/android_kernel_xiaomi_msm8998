@@ -108,9 +108,9 @@ EOF
           git clone https://github.com/SukiSU-Ultra/SukiSU_patch.git kpm
           cd kpm/kpm
           chmod +x patch_linux
-          # 假设内核镜像在 OUT_DIR 目录下，如 Image.gz-dtb
-          ./patch_linux $GITHUB_WORKSPACE/$OUT_DIR
-          cd $GITHUB_WORKSPACE
+          # 根据你的内核输出文件修改，假设是 zImage 或 Image.gz-dtb
+          ./patch_linux "$GITHUB_WORKSPACE/$OUT_DIR"
+          cd "$GITHUB_WORKSPACE"
 
       - name: Upload Patched Kernel Artifact
         uses: actions/upload-artifact@v3
