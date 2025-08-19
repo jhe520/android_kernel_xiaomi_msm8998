@@ -16,7 +16,7 @@ jobs:
 
     steps:
       - name: Checkout Kernel Source
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
         with:
           repository: jhe520/android_kernel_xiaomi_msm8998
           ref: lineage-18.1
