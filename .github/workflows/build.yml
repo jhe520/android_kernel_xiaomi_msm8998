@@ -53,25 +53,8 @@ jobs:
 
       - name: Patch set_memory.h for <4.19 Kernel
         run: |
-          PATCH_FILE="include/linux/set_memory_patch.h"
           mkdir -p include/linux
-          cat << 'EOF' > $PATCH_FILE
-#ifndef _LINUX_SET_MEMORY_PATCH_H
-#define _LINUX_SET_MEMORY_PATCH_H
-
-#include <linux/kernel.h>
-#include <linux/mm.h>
-#include <asm/cacheflush.h>
-#include <asm/pgtable.h>
-
-/* Minimal set_memory patch for <4.19 kernels */
-static inline int set_memory_ro(unsigned long addr, int numpages) { return 0; }
-static inline int set_memory_rw(unsigned long addr, int numpages) { return 0; }
-static inline int set_memory_x(unsigned long addr, int numpages) { return 0; }
-static inline int set_memory_nx(unsigned long addr, int numpages) { return 0; }
-
-#endif /* _LINUX_SET_MEMORY_PATCH_H */
-EOF
+          echo "I2luY2x1ZGUgPGxpbmV4L2tlcm5lbC5oPg0KaW5jbHVkZSA8bGlua3MvbW0uaD4NCmluY2x1ZGUgPGFzbS9jYWNoZWZsdXNoLmg+DQppbmNsdWRlIDxhcz9wZ3RhYmxlLmg+DQovKiBNaW5pbWFsIHNldF9tZW1vcnkgcGF0Y2ggZm9yIDw0LjE5IGtlcm5lbHMgKi8NCnN0YXRpYyBpbmxpbmUgaW50IHNldF9tZW1vcnlfcm8odW5zaWduZWQgbG9uZyBhZGRyLCBpbnQgbnVtcGFnZXMpIHsgcmV0dXJuIDA7IH0Kc3RhdGljIGlubGluZSBpbnQgc2V0X21lbW9yeV93cihlZCBhZGRyLCBpbnQgbnVtcGFnZXMpIHsgcmV0dXJuIDA7IH0Kc3RhdGljIGlubGluZSBpbnQgc2V0X21lbW9yeV94KHVuc2lnbmVkIGxvbmcgYWRkciwgaW50IG51bXBhZ2VzKSB7IHJldHVybiAwOyB9CnN0YXRpYyBpbmxpbmUgaW50IHNldF9tZW1vcnlfbngodW5zaWduZWQgbG9uZyBhZGRyLCBpbnQgbnVtcGFnZXMpIHsgcmV0dXJuIDA7IH0=" | base64 --decode > include/linux/set_memory_patch.h
           sed -i '1i#include "set_memory_patch.h"' include/linux/set_memory.h
 
       - name: Update chiron_defconfig with required options
@@ -108,7 +91,6 @@ EOF
           git clone https://github.com/SukiSU-Ultra/SukiSU_patch.git kpm
           cd kpm/kpm
           chmod +x patch_linux
-          # 根据你的内核输出文件修改，假设是 zImage 或 Image.gz-dtb
           ./patch_linux "$GITHUB_WORKSPACE/$OUT_DIR"
           cd "$GITHUB_WORKSPACE"
 
